@@ -6,13 +6,17 @@ An independent, OpenAI-compatible Go gateway for the DeepSI model family. It exp
 
 - Mocked-upstream unit and integration tests pass, and the gateway builds and runs under PM2.
 - 9Router discovery succeeds at `http://127.0.0.1:20128/v1`.
-- **Live DeepSI inference is not available yet.** The installed 9Router instance (0.4.80) currently exposes 35 upstream models, but none of the four required NVIDIA/StepFun model IDs are registered. `/readyz` therefore reports `degraded` until those upstream models are added in 9Router (or the `DEEPSI_*_UPSTREAM_MODEL` mappings are pointed at exact registered IDs).
+- The connected 9Router instance exposes 35 upstream models. Its current NVIDIA catalog includes `nvidia/z-ai/glm4.7` and `nvidia/minimaxai/minimax-m2.7`, but does not include a compatible vision or embedding model. A live GLM request is currently blocked by 9Router's provider rate limit, and `/readyz` reports `degraded` until all four required NVIDIA models are available and their mappings point at registered IDs.
 - 9Router 0.4.80 is affected by [GHSA-86m2-fcxq-5q7c / CVE-2026-55641](https://github.com/advisories/GHSA-86m2-fcxq-5q7c). Upgrade to 9Router 0.5.2 or newer before exposing it beyond loopback. See [Security](#security).
 
 ## Architecture
 
 ```text
-Existing frontend (APIDeepSIService) / backend / external clients
+Clients / frontend (APIDeepSIService)
+                              |
+                              v
+             APIDeepSIService-ServerSide :18085
+         client auth / scopes / billing / quotas
                               |
                               v
                    DeepSI LLM API Gateway :8085
@@ -27,8 +31,8 @@ Existing frontend (APIDeepSIService) / backend / external clients
              +----------------+----------------+
              |                |                |
        DeepSI-M1           DeepSI-S1       DeepSI-V1
-       NVIDIA NIM           Step 5         NVIDIA NIM
-       Nemotron VL          Preview        Nemotron Omni
+       NVIDIA NIM           NVIDIA NIM     NVIDIA NIM
+       Nemotron VL          GLM 4.7        Nemotron Omni
              |                |                |
              +----------------+----------------+
                               |
@@ -43,7 +47,7 @@ The gateway is stateless and keeps provider credentials and gateway client crede
 | Public model | Default upstream model ID | Endpoint | Role |
 |---|---|---|---|
 | `DeepSI-M1` | `nvidia/nemotron-3.5-super-vl-120b-a12b` | `/v1/chat/completions` | Fast, versatile chat, coding, reasoning, multimodal |
-| `DeepSI-S1` | `stepfun-ai/step-5-preview` | `/v1/chat/completions` | Advanced reasoning and complex problem solving |
+| `DeepSI-S1` | `nvidia/z-ai/glm4.7` | `/v1/chat/completions` | Advanced reasoning and complex problem solving |
 | `DeepSI-V1` | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | `/v1/chat/completions` | Omni and multimodal reasoning |
 | `DeepSI-E1` | `nvidia/nemotron-3.5-embed-8b` | `/v1/embeddings` | Text/document embeddings, not conversational chat |
 
@@ -76,19 +80,23 @@ LLM-APIGATEWAY/
 This project is intentionally separate from the existing applications:
 
 - `APIDeepSIService/` — existing React/Vite frontend, unchanged.
-- `APIDeepSIService-ServerSide/` — existing Go backend on `127.0.0.1:18085`, unchanged.
+- `APIDeepSIService-ServerSide/` — Go public API backend on `127.0.0.1:18085`; it now authenticates client keys and forwards LLM requests to this gateway over loopback.
 - `deploy/` — existing static server and Cloudflare tunnel configuration, unchanged.
 - `ecosystem.config.cjs` — one new PM2 application entry, `llm-api-gateway`, was added.
 - The gateway listens on `127.0.0.1:8085`, which does not conflict with the backend (`18085`), frontend (`18086`), or 9Router (`20128`).
 
-The existing Cloudflare tunnel still routes `service.deepsi.space/v1` to the existing backend. The new gateway is therefore local-only by design. To expose it, add a dedicated hostname or deliberately reroute the tunnel after deciding how the existing backend `/v1` surface should coexist.
+The existing Cloudflare tunnel still routes `service.deepsi.space/v1` to the backend. Keep that client-facing URL and the gateway private: the backend calls `http://127.0.0.1:8085/v1` internally, so provider credentials and the gateway key are never sent to client applications.
+
+## Backend integration
+
+Configure the backend's `.env` with `LLM_ENABLED=true`, `LLM_BASE_URL=http://127.0.0.1:8085/v1`, and `LLM_API_KEY` equal to this gateway's `LLM_GATEWAY_API_KEY`. Restart the backend after changing its environment. Clients continue to use `https://service.deepsi.space/v1` and DeepSI API keys as documented by the backend; they must not call this internal gateway directly. The backend continues to own client authentication, scope checks, billing, and quotas, while this gateway owns the DeepSI model catalog, NVIDIA/9Router routing, and provider credentials.
 
 ## Prerequisites
 
 - Go 1.24 or newer.
 - Node.js and PM2 for the production process integration.
 - A running 9Router instance with an OpenAI-compatible `/v1` API.
-- Provider credentials registered **inside 9Router**: NVIDIA API credentials for the NVIDIA-hosted models, and the appropriate StepFun provider/catalog for Step 5 Preview.
+- NVIDIA provider credentials registered **inside 9Router** for every configured NVIDIA-hosted model.
 
 ## 9Router setup
 
@@ -332,7 +340,7 @@ The gateway itself does not use a client-controlled `Host` header for authentica
 
 ## Known limitations
 
-- Live DeepSI inference cannot be verified until the four upstream models are registered in 9Router. The test suite validates gateway behavior against mocked upstreams; readiness and catalog discovery were checked against the real local 9Router.
+- DeepSI-S1 maps to NVIDIA GLM 4.7, but live inference is currently blocked by 9Router's provider rate limit. DeepSI-M1, DeepSI-V1, and DeepSI-E1 need matching NVIDIA chat, vision, and embedding models registered in 9Router. The test suite validates gateway behavior against mocked upstreams; readiness and catalog discovery were checked against the real local 9Router.
 - The existing Cloudflare tunnel has not been rerouted to this gateway, because the existing backend already owns `service.deepsi.space/v1`.
 - The gateway is intentionally stateless and has no usage database, billing ledger, or multi-tenant key store. The existing backend owns those concerns.
 - 9Router 0.4.80 must be upgraded for a production deployment.

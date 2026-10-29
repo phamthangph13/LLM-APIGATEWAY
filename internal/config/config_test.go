@@ -34,7 +34,7 @@ func TestParseDefaults(t *testing.T) {
 	if cfg.Models.M1 != "nvidia/nemotron-3.5-super-vl-120b-a12b" {
 		t.Fatalf("unexpected M1 mapping: %s", cfg.Models.M1)
 	}
-	if cfg.Models.S1 != "stepfun-ai/step-5-preview" {
+	if cfg.Models.S1 != "nvidia/z-ai/glm4.7" {
 		t.Fatalf("unexpected S1 mapping: %s", cfg.Models.S1)
 	}
 	if cfg.Models.V1 != "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning" {

@@ -213,7 +213,7 @@ func Parse(lookup func(string) (string, bool)) (Config, error) {
 		CORS: CORSConfig{AllowedOrigins: origins},
 		Models: ModelsConfig{
 			M1:                 env("DEEPSI_M1_UPSTREAM_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b"),
-			S1:                 env("DEEPSI_S1_UPSTREAM_MODEL", "stepfun-ai/step-5-preview"),
+			S1:                 env("DEEPSI_S1_UPSTREAM_MODEL", "nvidia/z-ai/glm4.7"),
 			V1:                 env("DEEPSI_V1_UPSTREAM_MODEL", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"),
 			E1:                 env("DEEPSI_E1_UPSTREAM_MODEL", "nvidia/nemotron-3.5-embed-8b"),
 			E1DefaultInputType: originalInputType,
