@@ -1,0 +1,20 @@
+# Local environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Build output
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
